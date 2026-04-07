@@ -1,0 +1,101 @@
+# 跨境电商智能助手 - Docker Compose配置
+# 包含Bot服务和MySQL数据库服务
+
+version: '3.8'
+
+services:
+  # MySQL数据库服务
+  mysql:
+    image: mysql:8.0
+    container_name: crossborder_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-crossborder_bot}
+      MYSQL_USER: ${MYSQL_USER:-bot_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-bot_password}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - crossborder_network
+
+  # Discord Bot服务
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crossborder_bot
+    restart: unless-stopped
+    environment:
+      # Discord配置
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+      BOT_PREFIX: ${BOT_PREFIX:-/}
+      BOT_LANGUAGE: ${BOT_LANGUAGE:-zh-CN}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+      # 数据库配置
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER:-bot_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-bot_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-crossborder_bot}
+
+      # AI API Keys
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DEFAULT_AI_PROVIDER: ${DEFAULT_AI_PROVIDER:-gemini}
+
+      # 平台API配置
+      PLATFORM_API_URL: ${PLATFORM_API_URL}
+      PLATFORM_API_KEY: ${PLATFORM_API_KEY}
+
+      # 淘宝/京东API配置
+      TAOBAO_APP_KEY: ${TAOBAO_APP_KEY}
+      TAOBAO_APP_SECRET: ${TAOBAO_APP_SECRET}
+      TAOBAO_API_URL: ${TAOBAO_API_URL}
+      JD_APP_KEY: ${JD_APP_KEY}
+      JD_APP_SECRET: ${JD_APP_SECRET}
+      JD_API_URL: ${JD_API_URL}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - crossborder_network
+
+  # 可选：Redis缓存服务（用于未来扩展）
+  redis:
+    image: redis:7-alpine
+    container_name: crossborder_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - crossborder_network
+    profiles:
+      - with-redis
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  crossborder_network:
+    driver: bridge
