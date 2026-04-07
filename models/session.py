@@ -53,7 +53,7 @@ class Session(Base):
     context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # 会话元数据（JSON格式存储额外信息）
-    metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    session_metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # 会话状态
     is_active: Mapped[bool] = mapped_column(default=True)
@@ -95,7 +95,7 @@ class Session(Base):
             "ai_provider": self.ai_provider,
             "title": self.title,
             "context": self.context,
-            "metadata": self.metadata,
+            "session_metadata": self.session_metadata,
             "is_active": self.is_active,
             "message_count": self.message_count,
             "created_at": self.created_at.isoformat() if self.created_at else None,
