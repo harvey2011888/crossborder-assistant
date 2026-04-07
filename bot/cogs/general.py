@@ -106,6 +106,7 @@ class GeneralCog(commands.Cog):
         Args:
             interaction: Discord交互对象
         """
+        # 先发送响应，避免长时间显示 typing
         embed = discord.Embed(
             title="欢迎使用跨境电商智能助手",
             description=f"您好，{interaction.user.display_name}！",
@@ -142,7 +143,9 @@ class GeneralCog(commands.Cog):
             inline=False,
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        # 使用 defer 提前响应，然后发送实际消息
+        await interaction.response.defer(ephemeral=True, thinking=False)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(name="settings", description="查看和修改用户设置")
     async def settings_command(self, interaction: discord.Interaction) -> None:
