@@ -82,7 +82,7 @@ async def init_database() -> None:
 
     try:
         # 导入所有模型以确保它们被注册到Base
-        from models import Base  # noqa: F401
+        from models.user import User  # noqa: F401
         from models.order import Order  # noqa: F401
         from models.session import Session  # noqa: F401
         from models.user import User  # noqa: F401

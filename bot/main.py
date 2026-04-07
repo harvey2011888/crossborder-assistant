@@ -39,7 +39,7 @@ class CrossborderBot(commands.Bot):
     def __init__(self) -> None:
         """初始化Bot实例"""
         # 配置intents
-        intents = discord.Intents.default()
+        intents = discord.Intents.all()
         intents.message_content = True
         intents.members = True
 
@@ -77,7 +77,11 @@ class CrossborderBot(commands.Bot):
         # 同步斜杠命令
         if config.bot.guild_id:
             guild = discord.Object(id=config.bot.guild_id)
-            self.tree.copy_global_to(guild=guild)
+            
+            await self.tree.sync()
+            self.logger.info("斜杠命令已全局同步（支持私聊）")
+            
+            guild = discord.Object(id=config.bot.guild_id)
             await self.tree.sync(guild=guild)
             self.logger.info(f"斜杠命令已同步到Guild: {config.bot.guild_id}")
         else:

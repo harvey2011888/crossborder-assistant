@@ -94,7 +94,7 @@ class GeneralCog(commands.Cog):
 
         embed.set_footer(text="提示: 您也可以直接@我进行对话")
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
 
     @app_commands.command(name="start", description="开始使用跨境电商助手")
     async def start_command(self, interaction: discord.Interaction) -> None:
@@ -144,8 +144,8 @@ class GeneralCog(commands.Cog):
         )
 
         # 使用 defer 提前响应，然后发送实际消息
-        await interaction.response.defer(ephemeral=True, thinking=False)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.response.defer(ephemeral=False, thinking=False)
+        await interaction.followup.send(embed=embed, ephemeral=False)
 
     @app_commands.command(name="settings", description="查看和修改用户设置")
     async def settings_command(self, interaction: discord.Interaction) -> None:
@@ -225,7 +225,7 @@ class GeneralCog(commands.Cog):
             inline=False,
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
 
     @app_commands.command(name="ai_switch", description="切换AI服务提供商")
     @app_commands.describe(provider="选择AI提供商")
@@ -268,7 +268,7 @@ class GeneralCog(commands.Cog):
                 value="请联系管理员配置所需的AI服务API Key",
                 inline=False,
             )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message(embed=embed, ephemeral=False)
             return
 
         # 更新用户偏好
@@ -309,7 +309,7 @@ class GeneralCog(commands.Cog):
             inline=False,
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
 
     @app_commands.command(name="ping", description="测试Bot响应")
     async def ping_command(self, interaction: discord.Interaction) -> None:
@@ -329,7 +329,7 @@ class GeneralCog(commands.Cog):
             color=discord.Color.green() if latency < 200 else discord.Color.orange(),
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
 
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member) -> None:
