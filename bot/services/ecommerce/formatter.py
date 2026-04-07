@@ -181,7 +181,7 @@ class ImageURLProcessor:
         # 京东图片URL格式: https://img10.360buyimg.com/.../image.jpg
         if "360buyimg.com" in url or "jd.com" in url:
             # 替换尺寸标识
-            url = re.sub(r"/[ns]\d+/, f"/{size_param}/", url)
+            url = re.sub(r"/[ns]\d+/", f"/{size_param}/", url)
             # 如果没有尺寸标识，在适当位置添加
             if f"/{size_param}/" not in url:
                 url = url.replace("/jfs/", f"/{size_param}/jfs/")
