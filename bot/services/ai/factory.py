@@ -9,9 +9,19 @@ from typing import Dict, Optional, Type
 
 from bot.core.config import config
 from bot.services.ai.base import AIProvider, BaseAIService
-from bot.services.ai.gemini import GeminiService
-from bot.services.ai.openai import OpenAIService
-from bot.services.ai.qianwen import QianwenService
+
+# 延迟导入具体服务实现
+def _import_gemini():
+    from bot.services.ai.gemini import GeminiService
+    return GeminiService
+
+def _import_qianwen():
+    from bot.services.ai.qianwen import QianwenService
+    return QianwenService
+
+def _import_openai():
+    from bot.services.ai.openai import OpenAIService
+    return OpenAIService
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -24,11 +34,11 @@ class AIServiceFactory:
     负责创建和管理AI服务实例，支持多种AI提供商的动态切换
     """
 
-    # 服务注册表
-    _services: Dict[str, Type[BaseAIService]] = {
-        AIProvider.GEMINI.value: GeminiService,
-        AIProvider.QIANWEN.value: QianwenService,
-        AIProvider.OPENAI.value: OpenAIService,
+    # 服务注册表（使用延迟导入函数）
+    _services: Dict[str, callable] = {
+        AIProvider.GEMINI.value: _import_gemini,
+        AIProvider.QIANWEN.value: _import_qianwen,
+        AIProvider.OPENAI.value: _import_openai,
     }
 
     # 服务实例缓存
@@ -79,9 +89,11 @@ class AIServiceFactory:
             )
 
         # 创建服务实例
-        service_class = cls._services[provider]
+        import_func = cls._services[provider]
 
         try:
+            # 延迟导入服务类
+            service_class = import_func()
             service = service_class(api_key=api_key, model=model, **kwargs)
             logger.info(f"成功创建 {provider} 服务实例，使用模型: {service.model}")
             return service

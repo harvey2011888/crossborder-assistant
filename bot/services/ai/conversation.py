@@ -87,7 +87,7 @@ class ConversationManager:
                 "timestamp": datetime.utcnow().isoformat(),
             })
 
-        async with get_db_session() as db:
+        async with await get_db_session() as db:
             session = Session(
                 session_id=session_id,
                 user_id=user_id,
@@ -122,7 +122,7 @@ class ConversationManager:
         Returns:
             会话对象或None
         """
-        async with get_db_session() as db:
+        async with await get_db_session() as db:
             result = await db.execute(
                 select(Session).where(Session.session_id == session_id)
             )
@@ -193,7 +193,7 @@ class ConversationManager:
         Returns:
             会话列表
         """
-        async with get_db_session() as db:
+        async with await get_db_session() as db:
             query = select(Session).where(
                 Session.user_id == user_id,
                 Session.is_active == True,
@@ -256,7 +256,7 @@ class ConversationManager:
         context["messages"] = self._truncate_context(context["messages"])
 
         # 更新会话
-        async with get_db_session() as db:
+        async with await get_db_session() as db:
             expires_at = datetime.utcnow() + timedelta(hours=self.session_ttl_hours)
 
             await db.execute(
@@ -351,7 +351,7 @@ class ConversationManager:
 
             context["messages"] = messages
 
-            async with get_db_session() as db:
+            async with await get_db_session() as db:
                 await db.execute(
                     update(Session)
                     .where(Session.session_id == session_id)
@@ -402,7 +402,7 @@ class ConversationManager:
 
             context["messages"] = messages
 
-            async with get_db_session() as db:
+            async with await get_db_session() as db:
                 await db.execute(
                     update(Session)
                     .where(Session.session_id == session_id)
@@ -428,7 +428,7 @@ class ConversationManager:
         Returns:
             是否成功
         """
-        async with get_db_session() as db:
+        async with await get_db_session() as db:
             result = await db.execute(
                 update(Session)
                 .where(Session.session_id == session_id)
@@ -451,7 +451,7 @@ class ConversationManager:
         Returns:
             是否成功
         """
-        async with get_db_session() as db:
+        async with await get_db_session() as db:
             result = await db.execute(
                 delete(Session).where(Session.session_id == session_id)
             )
@@ -469,7 +469,7 @@ class ConversationManager:
         Returns:
             清理的会话数量
         """
-        async with get_db_session() as db:
+        async with await get_db_session() as db:
             result = await db.execute(
                 update(Session)
                 .where(
@@ -515,7 +515,7 @@ class ConversationManager:
         Returns:
             统计信息字典
         """
-        async with get_db_session() as db:
+        async with await get_db_session() as db:
             # 活跃会话数
             active_result = await db.execute(
                 select(Session).where(

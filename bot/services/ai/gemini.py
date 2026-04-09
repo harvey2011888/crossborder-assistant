@@ -18,18 +18,18 @@ class GeminiService(BaseAIService):
     Google Gemini AI服务实现类
 
     支持模型：
-    - gemini-pro: 文本对话模型
-    - gemini-pro-vision: 多模态模型（支持图片）
+    - gemini-1.5-flash: 快速响应模型（推荐）
+    - gemini-1.5-flash-8b: 轻量级快速响应模型
     - gemini-1.5-pro: 最新Pro模型
-    - gemini-1.5-flash: 快速响应模型
+    - gemini-1.5-pro-vision: 多模态模型（支持图片）
     """
 
-    # 支持的模型列表
+    # 支持的模型列表（已弃用gemini-pro和gemini-pro-vision）
     SUPPORTED_MODELS = [
-        "gemini-pro",
-        "gemini-pro-vision",
-        "gemini-1.5-pro",
         "gemini-1.5-flash",
+        "gemini-1.5-flash-8b",
+        "gemini-1.5-pro",
+        "gemini-1.5-pro-vision",
     ]
 
     def __init__(
@@ -53,7 +53,7 @@ class GeminiService(BaseAIService):
 
     def _get_default_model(self) -> str:
         """获取默认模型"""
-        return "gemini-pro"
+        return "gemini-1.5-flash"
 
     def _get_provider(self) -> str:
         """获取提供商标识"""

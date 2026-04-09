@@ -2,7 +2,6 @@
 国际物流服务命令Cog
 
 包含运费估算、包裹追踪、物流时效预估等物流相关命令
-注意: 此模块为预留框架，待自建平台API接口文档提供后实现具体逻辑
 """
 
 import logging
@@ -13,29 +12,62 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.core.config import config
+from bot.services.platform.logistics import (
+    LogisticsService,
+    ShippingRateRequest,
+    logistics_service,
+)
+from bot.services.platform.shipping_api import ShippingAPIError
+from bot.services.platform.category_types import category_type_manager
 
 logger = logging.getLogger(__name__)
 
-# 支持的物流目的地（预留）
-SUPPORTED_DESTINATIONS = [
-    "美国",
-    "加拿大",
-    "英国",
-    "德国",
-    "法国",
-    "澳大利亚",
-    "日本",
-    "韩国",
-    "新加坡",
-    "马来西亚",
-]
+# 支持的目的地国家代码映射（Discord choices 限制最多25个）
+SUPPORTED_COUNTRIES = {
+    "US": "美国",
+    "CA": "加拿大",
+    "UK": "英国",
+    "GB": "英国",
+    "DE": "德国",
+    "FR": "法国",
+    "AU": "澳大利亚",
+    "JP": "日本",
+    "KR": "韩国",
+    "SG": "新加坡",
+    "MY": "马来西亚",
+    "NZ": "新西兰",
+    "IT": "意大利",
+    "ES": "西班牙",
+    "NL": "荷兰",
+    "BE": "比利时",
+    "AT": "奥地利",
+    "CH": "瑞士",
+    "SE": "瑞典",
+    "NO": "挪威",
+    "DK": "丹麦",
+    "FI": "芬兰",
+    "IE": "爱尔兰",
+    "PT": "葡萄牙",
+}
 
-# 物流方式（预留）
-SHIPPING_METHODS = {
-    "standard": "标准快递",
-    "express": "特快专递",
-    "economy": "经济物流",
-    "sea": "海运",
+# 完整的国家映射（用于显示和API调用）
+ALL_COUNTRIES = {
+    **SUPPORTED_COUNTRIES,
+    "GR": "希腊",
+    "PL": "波兰",
+    "CZ": "捷克",
+    "HU": "匈牙利",
+    "RO": "罗马尼亚",
+    "BG": "保加利亚",
+    "HR": "克罗地亚",
+    "SI": "斯洛文尼亚",
+    "SK": "斯洛伐克",
+    "LT": "立陶宛",
+    "LV": "拉脱维亚",
+    "EE": "爱沙尼亚",
+    "LU": "卢森堡",
+    "MT": "马耳他",
+    "CY": "塞浦路斯",
 }
 
 
@@ -44,7 +76,6 @@ class LogisticsCog(commands.Cog):
     物流服务命令Cog
 
     提供运费估算、包裹追踪、物流时效预估等功能
-    注意: 当前为预留框架，待接口文档提供后实现完整功能
     """
 
     def __init__(self, bot: commands.Bot) -> None:
@@ -56,131 +87,258 @@ class LogisticsCog(commands.Cog):
         """
         self.bot = bot
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.logistics_service = logistics_service
 
-    @app_commands.command(name="shipping", description="估算运费（预留功能）")
+    @app_commands.command(name="shipping", description="估算运费")
     @app_commands.describe(
-        weight="包裹重量（千克）",
+        weight="包裹重量（克）",
         destination="目的地国家",
-        method="物流方式",
-        length="包裹长度（厘米，可选）",
-        width="包裹宽度（厘米，可选）",
-        height="包裹高度（厘米，可选）",
+        category_type="商品类型（大类-子类）",
+        length="包裹长度（厘米，默认10）",
+        width="包裹宽度（厘米，默认10）",
+        height="包裹高度（厘米，默认10）",
     )
     @app_commands.choices(
         destination=[
-            app_commands.Choice(name=dest, value=dest)
-            for dest in SUPPORTED_DESTINATIONS[:10]
-        ],
-        method=[
-            app_commands.Choice(name=name, value=key)
-            for key, name in SHIPPING_METHODS.items()
+            app_commands.Choice(name=f"{name} ({code})", value=code)
+            for code, name in SUPPORTED_COUNTRIES.items()
         ],
     )
     async def shipping_command(
         self,
         interaction: discord.Interaction,
-        weight: float,
+        weight: int,
         destination: app_commands.Choice[str],
-        method: app_commands.Choice[str],
-        length: Optional[float] = None,
-        width: Optional[float] = None,
-        height: Optional[float] = None,
+        category_type: Optional[str] = None,
+        length: Optional[int] = 10,
+        width: Optional[int] = 10,
+        height: Optional[int] = 10,
     ) -> None:
         """
-        运费估算命令（预留框架）
+        运费估算命令
 
         根据包裹重量、尺寸和目的地估算运费
-        待自建平台API接口文档提供后实现
 
         Args:
             interaction: Discord交互对象
-            weight: 包裹重量（千克）
-            destination: 目的地国家
-            method: 物流方式
+            weight: 包裹重量（克）
+            destination: 目的地国家代码
+            category_type: 商品类型代码
             length: 包裹长度（厘米）
             width: 包裹宽度（厘米）
             height: 包裹高度（厘米）
         """
-        await interaction.response.defer(thinking=True)
+        # 检查交互是否已过期，如果过期则不执行
+        try:
+            await interaction.response.defer(thinking=True)
+        except discord.errors.NotFound:
+            # 交互已过期，忽略
+            return
+        except Exception as e:
+            logger.warning(f"defer失败: {e}")
+            return
 
-        # 检查平台API是否配置
-        if not config.platform.api_url:
+        # 检查运费API是否配置
+        if not self.logistics_service.is_available():
             embed = discord.Embed(
-                title="功能预留",
-                description="运费估算功能正在开发中，敬请期待！",
+                title="⚠️ 服务不可用",
+                description="运费测算服务未配置，请联系管理员。",
                 color=discord.Color.orange(),
-            )
-            embed.add_field(
-                name="您输入的信息",
-                value=(
-                    f"重量: {weight}kg\n"
-                    f"目的地: {destination.name}\n"
-                    f"物流方式: {method.name}\n"
-                    f"尺寸: {length or '-'} x {width or '-'} x {height or '-'} cm"
-                ),
-                inline=False,
-            )
-            embed.add_field(
-                name="预计上线时间",
-                value="待自建平台API接口文档提供后实现",
-                inline=False,
             )
             await interaction.followup.send(embed=embed)
             return
 
-        # TODO: 接入自建平台物流API
-        # 实现运费估算逻辑
+        # 验证输入参数
+        if weight <= 0:
+            await interaction.followup.send(
+                "❌ 包裹重量必须大于0克",
+                ephemeral=True,
+            )
+            return
+
+        if weight > 30000:  # 30kg限制
+            await interaction.followup.send(
+                "❌ 包裹重量不能超过30000克（30公斤）",
+                ephemeral=True,
+            )
+            return
+
+        if length <= 0 or width <= 0 or height <= 0:
+            await interaction.followup.send(
+                "❌ 包裹尺寸必须大于0",
+                ephemeral=True,
+            )
+            return
+
         try:
-            # 模拟运费计算
-            base_rate = 50.0  # 基础运费
-            weight_rate = weight * 30.0  # 重量费率
-            method_multiplier = {
-                "standard": 1.0,
-                "express": 2.5,
-                "economy": 0.7,
-                "sea": 0.4,
-            }.get(method.value, 1.0)
+            # 获取商品类型信息
+            if category_type:
+                # 从扁平化列表中获取显示名称
+                flattened = category_type_manager.get_flattened_types()
+                type_info = flattened.get(category_type.lower())
+                if type_info:
+                    category_name = type_info[0]  # 显示名称
+                    category_ids = [type_info[2]]  # ID
+                else:
+                    category_name = category_type
+                    category_ids = [189]
+            else:
+                category_name = "普货"
+                category_ids = [189]
 
-            estimated_cost = (base_rate + weight_rate) * method_multiplier
+            # 创建运费估算请求
+            request = ShippingRateRequest(
+                destination_country=destination.value,
+                weight_g=weight,
+                length_cm=length,
+                width_cm=width,
+                height_cm=height,
+                category_types=category_ids,
+            )
 
+            # 调用运费测算服务
+            response = await self.logistics_service.estimate_shipping_rate(request)
+
+            # 构建响应Embed
+            country_name = ALL_COUNTRIES.get(destination.value, destination.value)
             embed = discord.Embed(
-                title="运费估算",
-                description=f"从中国大陆到 {destination.name}",
+                title="📦 运费估算结果",
+                description=f"目的地: **{country_name}** ({destination.value})",
                 color=discord.Color.blue(),
             )
 
+            # 添加包裹信息
             embed.add_field(
-                name="包裹信息",
+                name="📋 包裹信息",
                 value=(
-                    f"重量: {weight}kg\n"
-                    f"物流方式: {method.name}\n"
-                    f"尺寸: {length or '-'} x {width or '-'} x {height or '-'} cm"
+                    f"重量: **{weight}g**\n"
+                    f"尺寸: **{length} × {width} × {height} cm**\n"
+                    f"体积: **{length * width * height} cm³**\n"
+                    f"商品类型: **{category_name}**"
                 ),
                 inline=False,
             )
 
+            # 分离可用和不可用线路
+            available_lines = [line for line in response.lines if line.state == "available"]
+            unavailable_lines = [line for line in response.lines if line.state != "available"]
+
+            # 添加可用线路（最多显示5条）
+            if available_lines:
+                lines_text = []
+                for i, line in enumerate(available_lines[:5], 1):
+                    label = self.logistics_service.format_line_label(line.label)
+                    tags = self.logistics_service.format_tags(line.tags)
+                    compute_type = self.logistics_service.format_compute_type(line.compute_type)
+
+                    line_text = (
+                        f"**{i}. {line.name}** {label}\n"
+                        f"💰 **¥{line.price}** (操作费: ¥{line.operation_fee})\n"
+                        f"⏱️ **{line.time_required}天** | 使用次数: {line.use_count:,}\n"
+                        f"📊 {compute_type} | {tags}\n"
+                        f"✅ 送达率: {line.max_delivery_time}%\n"
+                    )
+                    lines_text.append(line_text)
+
+                embed.add_field(
+                    name=f"🚚 可用线路 ({len(available_lines)}条)",
+                    value="\n".join(lines_text) if lines_text else "暂无可用线路",
+                    inline=False,
+                )
+
+            # 如果有不可用线路，简要显示
+            if unavailable_lines:
+                unavailable_text = []
+                for line in unavailable_lines[:3]:
+                    reason = line.unavailable_reason[0] if line.unavailable_reason else "暂不可用"
+                    unavailable_text.append(f"• {line.name}: {reason}")
+
+                embed.add_field(
+                    name=f"⚠️ 不可用线路 ({len(unavailable_lines)}条)",
+                    value="\n".join(unavailable_text) if unavailable_text else "暂无不可用线路",
+                    inline=False,
+                )
+
+            # 添加说明
             embed.add_field(
-                name="预估运费",
-                value=f"¥{estimated_cost:.2f}",
-                inline=True,
+                name="💡 说明",
+                value=(
+                    "• 以上价格为预估价格，实际价格以订单确认时为准\n"
+                    "• 计费方式: 实重计费按实际重量计算，体积重计费按长×宽×高/6000计算\n"
+                    "• 送达率表示历史包裹在预计时间内送达的百分比\n"
+                    "• 可投保线路支持购买运输保险"
+                ),
+                inline=False,
             )
 
-            embed.add_field(
-                name="预计时效",
-                value="7-15个工作日",
-                inline=True,
-            )
-
-            embed.set_footer(text="此为预估价格，实际价格以订单确认时为准")
+            embed.set_footer(text="数据来源于Hubbuy物流平台")
+            embed.timestamp = discord.utils.utcnow()
 
             await interaction.followup.send(embed=embed)
 
-        except Exception as e:
-            self.logger.error(f"估算运费时出错: {e}")
-            await interaction.followup.send(
-                "估算运费时发生错误，请稍后重试。",
-                ephemeral=True,
+        except ShippingAPIError as e:
+            self.logger.error(f"运费API错误: {e}")
+            error_msg = str(e)
+            if "missing nonce header" in error_msg.lower():
+                error_msg = "API认证失败，请检查配置"
+            elif "参数错误" in error_msg:
+                error_msg = "请求参数错误，请检查输入"
+
+            embed = discord.Embed(
+                title="❌ 运费测算失败",
+                description=f"调用运费API时出错: {error_msg}",
+                color=discord.Color.red(),
             )
+            await interaction.followup.send(embed=embed)
+
+        except Exception as e:
+            self.logger.error(f"估算运费时出错: {e}", exc_info=True)
+            embed = discord.Embed(
+                title="❌ 系统错误",
+                description="估算运费时发生系统错误，请稍后重试。",
+                color=discord.Color.red(),
+            )
+            await interaction.followup.send(embed=embed)
+
+    @shipping_command.autocomplete("category_type")
+    async def category_type_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        """
+        商品类型自动完成
+
+        根据用户输入提供商品类型建议
+        """
+        try:
+            # 检查管理器是否已初始化
+            if not category_type_manager.is_initialized():
+                logger.warning("商品类型管理器未初始化，尝试初始化...")
+                await category_type_manager.initialize()
+            
+            flattened = category_type_manager.get_flattened_types()
+            logger.debug(f"自动完成获取到 {len(flattened)} 个商品类型")
+            
+            # 如果没有获取到商品类型，返回空列表
+            if not flattened:
+                logger.warning("商品类型为空，自动完成无法提供选项")
+                return []
+            
+            choices = []
+            current_lower = current.lower() if current else ""
+            
+            for code, (display_name, _, _) in flattened.items():
+                # 如果用户有输入，进行过滤
+                if not current_lower or current_lower in display_name.lower() or current_lower in code.lower():
+                    choices.append(app_commands.Choice(name=display_name[:100], value=code[:100]))  # Discord限制名称长度
+            
+            logger.debug(f"自动完成返回 {len(choices)} 个选项")
+            # 限制返回25个选项（Discord限制）
+            return choices[:25]
+        except Exception as e:
+            logger.error(f"商品类型自动完成出错: {e}", exc_info=True)
+            return []
 
     @app_commands.command(name="track", description="追踪包裹（预留功能）")
     @app_commands.describe(
@@ -298,12 +456,14 @@ class LogisticsCog(commands.Cog):
     )
     @app_commands.choices(
         destination=[
-            app_commands.Choice(name=dest, value=dest)
-            for dest in SUPPORTED_DESTINATIONS[:10]
+            app_commands.Choice(name=name, value=code)
+            for code, name in list(SUPPORTED_COUNTRIES.items())[:10]
         ],
         method=[
-            app_commands.Choice(name=name, value=key)
-            for key, name in SHIPPING_METHODS.items()
+            app_commands.Choice(name="标准快递", value="standard"),
+            app_commands.Choice(name="特快专递", value="express"),
+            app_commands.Choice(name="经济物流", value="economy"),
+            app_commands.Choice(name="海运", value="sea"),
         ],
     )
     async def estimate_command(
@@ -412,13 +572,13 @@ class LogisticsCog(commands.Cog):
             interaction: Discord交互对象
         """
         embed = discord.Embed(
-            title="国际物流服务帮助",
+            title="📦 国际物流服务帮助",
             description="了解如何使用物流相关功能",
             color=discord.Color.blue(),
         )
 
         embed.add_field(
-            name="可用命令",
+            name="🚀 可用命令",
             value=(
                 "`/shipping` - 估算运费\n"
                 "`/track` - 追踪包裹\n"
@@ -429,35 +589,59 @@ class LogisticsCog(commands.Cog):
         )
 
         embed.add_field(
-            name="运费估算",
+            name="💰 运费估算",
             value=(
                 "使用 `/shipping` 命令估算运费，需要提供:\n"
-                "• 包裹重量（千克）\n"
+                "• 包裹重量（克）\n"
                 "• 目的地国家\n"
-                "• 物流方式\n"
-                "• 包裹尺寸（可选）"
+                "• 商品类型（可选，输入时会自动提示）\n"
+                "• 包裹尺寸（可选，默认10×10×10cm）\n\n"
+                "**示例**: `/shipping weight:500 destination:美国`"
             ),
             inline=False,
         )
 
         embed.add_field(
-            name="包裹追踪",
+            name="📋 商品类型",
+            value=(
+                "输入商品类型时会自动提示，格式为：大类-子类\n"
+                "例如：服饰-普货、鞋子-国际品牌、化妆品等"
+            ),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="📋 包裹追踪",
             value=(
                 "使用 `/track` 命令追踪包裹，需要提供:\n"
                 "• 运单号\n"
-                "• 物流公司（可选）"
+                "• 物流公司（可选）\n\n"
+                "**注意**: 此功能正在开发中"
             ),
             inline=False,
         )
 
         embed.add_field(
-            name="功能状态",
+            name="🌍 支持的国家",
             value=(
-                "⚠️ 当前物流功能为预留框架\n"
-                "待自建平台API接口文档提供后实现完整功能"
+                "美国、加拿大、英国、德国、法国、澳大利亚、\n"
+                "日本、韩国、新加坡、马来西亚等30+国家"
             ),
             inline=False,
         )
+
+        embed.add_field(
+            name="💡 计费说明",
+            value=(
+                "• **实重计费**: 按包裹实际重量计算\n"
+                "• **体积重计费**: 按长×宽×高/6000计算，取较大值\n"
+                "• 价格包含运费和操作费\n"
+                "• 部分线路支持购买运输保险"
+            ),
+            inline=False,
+        )
+
+        embed.set_footer(text="数据来源于Hubbuy物流平台")
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 

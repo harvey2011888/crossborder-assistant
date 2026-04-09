@@ -107,8 +107,13 @@ class ShoppingCog(commands.Cog):
             max_price: 最高价格限制
             min_price: 最低价格限制
         """
-        # 先发送"正在搜索"提示
-        await interaction.response.defer(thinking=True)
+        # 检查交互是否已经被确认
+        try:
+            if not interaction.response.is_done():
+                # 先发送"正在搜索"提示
+                await interaction.response.defer(thinking=True)
+        except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+            self.logger.warning(f"发送defer响应时出错: {e}")
 
         # 获取或创建用户
         user = await self._get_or_create_user(interaction.user)
@@ -158,7 +163,10 @@ class ShoppingCog(commands.Cog):
                     value="• 尝试使用不同的关键词\n• 放宽价格筛选条件\n• 尝试其他平台",
                     inline=False,
                 )
-                await interaction.followup.send(embed=embed)
+                try:
+                    await interaction.followup.send(embed=embed)
+                except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+                    self.logger.warning(f"发送响应时出错: {e}")
                 return
 
             # 创建搜索结果展示
@@ -190,14 +198,20 @@ class ShoppingCog(commands.Cog):
                 inline=False,
             )
 
-            await interaction.followup.send(embed=embed)
+            try:
+                await interaction.followup.send(embed=embed)
+            except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+                self.logger.warning(f"发送响应时出错: {e}")
 
         except Exception as e:
             self.logger.error(f"搜索商品时出错: {e}")
-            await interaction.followup.send(
-                "搜索商品时发生错误，请稍后重试。",
-                ephemeral=True,
-            )
+            try:
+                await interaction.followup.send(
+                    "搜索商品时发生错误，请稍后重试。",
+                    ephemeral=True,
+                )
+            except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+                self.logger.warning(f"发送响应时出错: {e}")
 
     def _get_mock_products(
         self,
@@ -339,7 +353,12 @@ class ShoppingCog(commands.Cog):
             category: 商品类别
             budget: 预算范围
         """
-        await interaction.response.defer(thinking=True)
+        # 检查交互是否已经被确认
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer(thinking=True)
+        except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+            self.logger.warning(f"发送defer响应时出错: {e}")
 
         # 获取用户
         user = await self._get_or_create_user(interaction.user)
@@ -389,7 +408,10 @@ class ShoppingCog(commands.Cog):
             inline=False,
         )
 
-        await interaction.followup.send(embed=embed)
+        try:
+            await interaction.followup.send(embed=embed)
+        except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+            self.logger.warning(f"发送响应时出错: {e}")
 
     @app_commands.command(name="compare", description="对比两个商品")
     @app_commands.describe(
@@ -412,7 +434,12 @@ class ShoppingCog(commands.Cog):
             product1: 第一个商品链接或ID
             product2: 第二个商品链接或ID
         """
-        await interaction.response.defer(thinking=True)
+        # 检查交互是否已经被确认
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer(thinking=True)
+        except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+            self.logger.warning(f"发送defer响应时出错: {e}")
 
         try:
             # TODO: 接入实际商品API获取商品详情
@@ -446,14 +473,20 @@ class ShoppingCog(commands.Cog):
                 inline=False,
             )
 
-            await interaction.followup.send(embed=embed)
+            try:
+                await interaction.followup.send(embed=embed)
+            except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+                self.logger.warning(f"发送响应时出错: {e}")
 
         except Exception as e:
             self.logger.error(f"对比商品时出错: {e}")
-            await interaction.followup.send(
-                "对比商品时发生错误，请检查商品链接或ID是否正确。",
-                ephemeral=True,
-            )
+            try:
+                await interaction.followup.send(
+                    "对比商品时发生错误，请检查商品链接或ID是否正确。",
+                    ephemeral=True,
+                )
+            except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+                self.logger.warning(f"发送响应时出错: {e}")
 
     @app_commands.command(name="translate", description="翻译商品信息")
     @app_commands.describe(
@@ -486,7 +519,12 @@ class ShoppingCog(commands.Cog):
             content: 要翻译的内容
             target_language: 目标语言
         """
-        await interaction.response.defer(thinking=True)
+        # 检查交互是否已经被确认
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer(thinking=True)
+        except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+            self.logger.warning(f"发送defer响应时出错: {e}")
 
         # 语言名称映射
         lang_names = {
@@ -536,14 +574,20 @@ class ShoppingCog(commands.Cog):
 
             embed.set_footer(text="翻译由AI提供，仅供参考")
 
-            await interaction.followup.send(embed=embed)
+            try:
+                await interaction.followup.send(embed=embed)
+            except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+                self.logger.warning(f"发送响应时出错: {e}")
 
         except Exception as e:
             self.logger.error(f"翻译商品信息时出错: {e}")
-            await interaction.followup.send(
-                "翻译时发生错误，请稍后重试。",
-                ephemeral=True,
-            )
+            try:
+                await interaction.followup.send(
+                    "翻译时发生错误，请稍后重试。",
+                    ephemeral=True,
+                )
+            except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+                self.logger.warning(f"发送响应时出错: {e}")
 
 
 async def setup(bot: commands.Bot) -> None:

@@ -37,8 +37,6 @@ from bot.services.ai.factory import (
     get_available_services,
     validate_ai_provider,
 )
-from bot.services.ai.gemini import GeminiService
-from bot.services.ai.openai import OpenAIService
 from bot.services.ai.prompts import (
     PromptManager,
     PromptType,
@@ -49,7 +47,6 @@ from bot.services.ai.prompts import (
     get_logistics_system_prompt,
     get_order_system_prompt,
 )
-from bot.services.ai.qianwen import QianwenService
 
 __all__ = [
     # 基类和数据类
@@ -65,10 +62,6 @@ __all__ = [
     "get_default_ai_service",
     "get_available_services",
     "validate_ai_provider",
-    # 具体服务实现
-    "GeminiService",
-    "QianwenService",
-    "OpenAIService",
     # 对话管理
     "ConversationManager",
     "conversation_manager",

@@ -4,7 +4,7 @@
 提供自建跨境电商平台的物流服务API封装
 包括运费估算、包裹追踪、物流时效查询等功能
 
-注意：此为预留框架，待平台API接口文档提供后实现具体逻辑
+API文档: docs/outapi/运费测算接口文档.md
 """
 
 import logging
@@ -15,6 +15,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from bot.services.platform.client import PlatformAPIError, PlatformClient
+from bot.services.platform.shipping_api import ShippingAPIClient, ShippingAPIError
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -57,41 +58,44 @@ class TrackingStatus(str, Enum):
 class ShippingRateRequest(BaseModel):
     """运费估算请求"""
 
-    destination_country: str = Field(..., description="目的地国家")
-    destination_postal_code: Optional[str] = Field(None, description="目的地邮政编码")
-    weight_kg: float = Field(..., description="包裹重量（千克）")
-    length_cm: Optional[float] = Field(None, description="包裹长度（厘米）")
-    width_cm: Optional[float] = Field(None, description="包裹宽度（厘米）")
-    height_cm: Optional[float] = Field(None, description="包裹高度（厘米）")
-    package_value: Optional[float] = Field(None, description="包裹价值（用于保险）")
-    currency: str = Field(default="USD", description="货币")
-    shipping_methods: Optional[list[ShippingMethod]] = Field(
-        None, description="指定物流方式（不指定则返回所有可用方式）"
-    )
+    destination_country: str = Field(..., description="目的地国家代码，如 'US'")
+    weight_g: int = Field(..., description="包裹重量（克）")
+    length_cm: int = Field(default=10, description="包裹长度（厘米）")
+    width_cm: int = Field(default=10, description="包裹宽度（厘米）")
+    height_cm: int = Field(default=10, description="包裹高度（厘米）")
+    quantity: int = Field(default=1, description="包裹数量")
+    category_types: Optional[list[int]] = Field(default=None, description="商品类型ID列表")
 
 
-class ShippingRate(BaseModel):
-    """运费选项"""
+class ShippingLine(BaseModel):
+    """运费线路"""
 
-    method: ShippingMethod = Field(..., description="物流方式")
-    method_name: str = Field(..., description="物流方式名称")
-    carrier: str = Field(..., description="承运商")
-    estimated_cost: float = Field(..., description="预估运费")
-    currency: str = Field(..., description="货币")
-    estimated_days_min: int = Field(..., description="预计送达天数（最小）")
-    estimated_days_max: int = Field(..., description="预计送达天数（最大）")
-    tracking_available: bool = Field(..., description="是否支持追踪")
-    insurance_included: bool = Field(..., description="是否包含保险")
-    insurance_max_amount: Optional[float] = Field(None, description="保险最高赔付金额")
+    id: int = Field(..., description="线路ID")
+    name: str = Field(..., description="线路名称")
+    logo: Optional[str] = Field(None, description="线路Logo URL")
+    price: str = Field(..., description="运费价格")
+    operation_fee: str = Field(..., description="操作费")
+    time_required: str = Field(..., description="运输时效（如 '8-12' 天）")
+    detail: str = Field(..., description="线路详情说明")
+    tags: list[dict[str, Any]] = Field(default_factory=list, description="标签列表")
+    state: str = Field(..., description="线路状态（available/unavailable）")
+    unavailable_reason: Optional[list[str]] = Field(None, description="不可用原因")
+    use_count: int = Field(default=0, description="使用次数")
+    max_delivery_time: str = Field(..., description="最大送达时间百分比")
+    delivery_time_arr: list[dict[str, str]] = Field(default_factory=list, description="配送时间分布")
+    label: list[dict[str, Any]] = Field(default_factory=list, description="标签（standard/rush等）")
+    compute_type: int = Field(..., description="计费类型（1-实重，2-体积重）")
+    weight_limit_start: int = Field(..., description="重量限制起始（克）")
+    weight_limit_end: int = Field(..., description="重量限制结束（克）")
 
 
 class ShippingRateResponse(BaseModel):
     """运费估算响应"""
 
     destination_country: str = Field(..., description="目的地国家")
-    package_weight_kg: float = Field(..., description="包裹重量")
-    rates: list[ShippingRate] = Field(..., description="运费选项列表")
-    valid_until: Optional[datetime] = Field(None, description="报价有效期")
+    package_weight_g: int = Field(..., description="包裹重量（克）")
+    package_dimensions: dict[str, int] = Field(..., description="包裹尺寸")
+    lines: list[ShippingLine] = Field(..., description="运费线路列表")
 
 
 class TrackingEvent(BaseModel):
@@ -164,21 +168,27 @@ class LogisticsService:
     封装自建平台的物流服务API，提供运费估算、包裹追踪、物流时效查询等功能
     """
 
-    def __init__(self, client: Optional[PlatformClient] = None) -> None:
+    def __init__(
+        self,
+        client: Optional[PlatformClient] = None,
+        shipping_client: Optional[ShippingAPIClient] = None,
+    ) -> None:
         """
         初始化物流服务
 
         Args:
             client: 平台API客户端实例，如未提供则自动创建
+            shipping_client: 运费API客户端实例，如未提供则自动创建
         """
         self.client = client or PlatformClient()
+        self.shipping_client = shipping_client or ShippingAPIClient()
         logger.info("物流服务初始化完成")
 
     async def estimate_shipping_rate(self, request: ShippingRateRequest) -> ShippingRateResponse:
         """
         估算运费
 
-        根据包裹信息和目的地计算运费
+        根据包裹信息和目的地计算运费，调用运费测算API
 
         Args:
             request: 运费估算请求
@@ -187,32 +197,66 @@ class LogisticsService:
             运费估算响应，包含不同物流方式的运费选项
 
         Raises:
-            PlatformAPIError: API调用失败
-            NotImplementedError: 功能待实现
+            ShippingAPIError: API调用失败
         """
         logger.info(
             f"运费估算请求: 目的地={request.destination_country}, "
-            f"重量={request.weight_kg}kg"
+            f"重量={request.weight_g}g, 尺寸={request.length_cm}x{request.width_cm}x{request.height_cm}cm"
         )
 
-        # TODO: 待平台API接口文档提供后实现
-        # 预期API端点: POST /api/v1/logistics/rates
-        # 预期请求体: request.model_dump()
-        # 预期响应: 包含rates数组，每个包含method, cost, estimated_days等
-
-        # 临时返回模拟数据（框架预留）
-        raise NotImplementedError(
-            "运费估算功能待平台API接口文档提供后实现。\n"
-            "预期实现: 调用 POST /api/v1/logistics/rates 获取运费\n"
-            "需要参数: destination_country, weight_kg, dimensions, package_value\n"
-            "返回数据: rates[] (包含method, carrier, cost, estimated_days)"
+        # 调用运费测算API
+        response_data = await self.shipping_client.calculate_postage(
+            country=request.destination_country,
+            weight=request.weight_g,
+            length=request.length_cm,
+            width=request.width_cm,
+            height=request.height_cm,
+            count=request.quantity,
+            category_types=request.category_types or [189],  # 默认普货
         )
 
-        # 实现示例（待接口文档确认后启用）:
-        # endpoint = "/api/v1/logistics/rates"
-        # data = request.model_dump()
-        # response = await self.client.post(endpoint, data=data)
-        # return ShippingRateResponse(**response)
+        # 解析响应数据
+        data = response_data.get("data", {})
+        lines_data = data.get("lines", [])
+        package_info = data.get("packageInfo", {})
+
+        # 构建运费线路列表
+        lines = []
+        for line_data in lines_data:
+            line = ShippingLine(
+                id=line_data.get("id", 0),
+                name=line_data.get("lineName", ""),
+                logo=line_data.get("logo"),
+                price=line_data.get("price", "0.00"),
+                operation_fee=line_data.get("operationFee", "0.00"),
+                time_required=line_data.get("timeRequired", ""),
+                detail=line_data.get("detail", ""),
+                tags=line_data.get("tags", []),
+                state=line_data.get("state", "unavailable"),
+                unavailable_reason=line_data.get("unavailableReason"),
+                use_count=line_data.get("useCount", 0),
+                max_delivery_time=line_data.get("maxDeliveryTime", "0"),
+                delivery_time_arr=line_data.get("deliveryTimeArr", []),
+                label=line_data.get("label", []),
+                compute_type=line_data.get("computeType", 1),
+                weight_limit_start=line_data.get("weightLimitStart", 0),
+                weight_limit_end=line_data.get("weightLimitEnd", 0),
+            )
+            lines.append(line)
+
+        # 按可用性和价格排序
+        lines.sort(key=lambda x: (x.state != "available", float(x.price)))
+
+        return ShippingRateResponse(
+            destination_country=request.destination_country,
+            package_weight_g=request.weight_g,
+            package_dimensions={
+                "length": request.length_cm,
+                "width": request.width_cm,
+                "height": request.height_cm,
+            },
+            lines=lines,
+        )
 
     async def track_package(self, request: PackageTrackingRequest) -> PackageTrackingResponse:
         """
@@ -421,7 +465,7 @@ class LogisticsService:
         Returns:
             如果平台API已配置则返回True
         """
-        return self.client.is_configured()
+        return self.shipping_client.is_configured()
 
     def format_tracking_status(self, status: TrackingStatus) -> str:
         """
@@ -465,6 +509,76 @@ class LogisticsService:
             ShippingMethod.RAIL: "铁路运输",
         }
         return method_map.get(method, f"未知方式: {method}")
+
+    def format_line_label(self, label: list[dict[str, Any]]) -> str:
+        """
+        格式化线路标签
+
+        Args:
+            label: 标签列表
+
+        Returns:
+            格式化后的标签字符串
+        """
+        if not label:
+            return ""
+
+        label_map = {
+            "standard": "🟢 标准",
+            "rush": "🔴 特快",
+            "economy": "🟡 经济",
+        }
+
+        labels = []
+        for item in label:
+            name = item.get("name", "")
+            labels.append(label_map.get(name, name))
+
+        return " ".join(labels) if labels else ""
+
+    def format_tags(self, tags: list[dict[str, Any]]) -> str:
+        """
+        格式化标签列表
+
+        Args:
+            tags: 标签列表
+
+        Returns:
+            格式化后的标签字符串
+        """
+        if not tags:
+            return ""
+
+        tag_emojis = {
+            "insure": "🛡️",
+            "common": "📋",
+            "chargeSign": "⚖️",
+        }
+
+        formatted_tags = []
+        for tag in tags:
+            tag_type = tag.get("type", "")
+            tag_name = tag.get("name", "")
+            emoji = tag_emojis.get(tag_type, "")
+            formatted_tags.append(f"{emoji} {tag_name}" if emoji else tag_name)
+
+        return " | ".join(formatted_tags)
+
+    def format_compute_type(self, compute_type: int) -> str:
+        """
+        格式化计费类型
+
+        Args:
+            compute_type: 计费类型（1-实重，2-体积重）
+
+        Returns:
+            计费类型描述
+        """
+        type_map = {
+            1: "实重计费",
+            2: "体积重计费",
+        }
+        return type_map.get(compute_type, "未知计费方式")
 
 
 # 全局物流服务实例

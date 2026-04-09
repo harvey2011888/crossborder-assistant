@@ -52,6 +52,14 @@ class PlatformConfig:
 
 
 @dataclass
+class ShippingConfig:
+    """运费测算API配置类"""
+
+    api_url: Optional[str]
+    api_key: Optional[str]
+
+
+@dataclass
 class TaobaoConfig:
     """淘宝API配置类"""
 
@@ -89,6 +97,7 @@ class Config:
         self.database = self._load_database_config()
         self.ai = self._load_ai_config()
         self.platform = self._load_platform_config()
+        self.shipping = self._load_shipping_config()
         self.taobao = self._load_taobao_config()
         self.jd = self._load_jd_config()
 
@@ -133,6 +142,13 @@ class Config:
         return PlatformConfig(
             api_url=os.getenv("PLATFORM_API_URL") or None,
             api_key=os.getenv("PLATFORM_API_KEY") or None,
+        )
+
+    def _load_shipping_config(self) -> ShippingConfig:
+        """加载运费测算API配置"""
+        return ShippingConfig(
+            api_url=os.getenv("SHIPPING_API_URL") or "https://express-api-727446398583.us-central1.run.app",
+            api_key=os.getenv("SHIPPING_API_KEY") or None,
         )
 
     def _load_taobao_config(self) -> TaobaoConfig:

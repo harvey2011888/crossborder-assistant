@@ -64,8 +64,7 @@ class GeneralCog(commands.Cog):
             name="基础命令",
             value=(
                 "`/help` - 显示此帮助信息\n"
-                "`/start` - 开始使用引导\n"
-                "`/settings` - 查看和修改用户设置"
+                "`/start` - 开始使用引导"
             ),
             inline=False,
         )
@@ -94,7 +93,16 @@ class GeneralCog(commands.Cog):
 
         embed.set_footer(text="提示: 您也可以直接@我进行对话")
 
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+        # 尝试发送响应，处理可能的交互错误
+        try:
+            # 检查交互是否已经被确认
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=embed, ephemeral=False)
+            else:
+                await interaction.response.send_message(embed=embed, ephemeral=False)
+        except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+            # 处理交互超时或无效的情况
+            self.logger.warning(f"发送响应时出错: {e}")
 
     @app_commands.command(name="start", description="开始使用跨境电商助手")
     async def start_command(self, interaction: discord.Interaction) -> None:
@@ -143,89 +151,107 @@ class GeneralCog(commands.Cog):
             inline=False,
         )
 
-        # 使用 defer 提前响应，然后发送实际消息
-        await interaction.response.defer(ephemeral=False, thinking=False)
-        await interaction.followup.send(embed=embed, ephemeral=False)
+        # 尝试发送响应，处理可能的交互错误
+        try:
+            # 检查交互是否已经被确认
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=embed, ephemeral=False)
+            else:
+                # 使用 defer 提前响应，然后发送实际消息
+                await interaction.response.defer(ephemeral=False, thinking=False)
+                await interaction.followup.send(embed=embed, ephemeral=False)
+        except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+            # 处理交互超时或无效的情况
+            self.logger.warning(f"发送响应时出错: {e}")
 
-    @app_commands.command(name="settings", description="查看和修改用户设置")
-    async def settings_command(self, interaction: discord.Interaction) -> None:
-        """
-        设置命令
+    # @app_commands.command(name="settings", description="查看和修改用户设置")
+    # async def settings_command(self, interaction: discord.Interaction) -> None:
+    #     """
+    #     设置命令
 
-        显示当前用户的设置信息，包括AI提供商偏好等
+    #     显示当前用户的设置信息，包括AI提供商偏好等
 
-        Args:
-            interaction: Discord交互对象
-        """
-        # 从数据库获取用户设置
-        async with get_db_session() as session:
-            result = await session.execute(
-                select(User).where(User.id == interaction.user.id)
-            )
-            user = result.scalar_one_or_none()
+    #     Args:
+    #         interaction: Discord交互对象
+    #     """
+    #     # 从数据库获取用户设置
+    #     async with get_db_session() as session:
+    #         result = await session.execute(
+    #             select(User).where(User.id == interaction.user.id)
+    #         )
+    #         user = result.scalar_one_or_none()
 
-            # 如果用户不存在，创建新用户
-            if not user:
-                user = User(
-                    id=interaction.user.id,
-                    username=interaction.user.name,
-                    discriminator=str(interaction.user.discriminator)
-                    if hasattr(interaction.user, "discriminator")
-                    else None,
-                    avatar_url=str(interaction.user.display_avatar.url)
-                    if interaction.user.display_avatar
-                    else None,
-                    preferred_ai_provider=config.ai.default_provider,
-                )
-                session.add(user)
-                await session.commit()
+    #         # 如果用户不存在，创建新用户
+    #         if not user:
+    #             user = User(
+    #                 id=interaction.user.id,
+    #                 username=interaction.user.name,
+    #                 discriminator=str(interaction.user.discriminator)
+    #                 if hasattr(interaction.user, "discriminator")
+    #                 else None,
+    #                 avatar_url=str(interaction.user.display_avatar.url)
+    #                 if interaction.user.display_avatar
+    #                 else None,
+    #                 preferred_ai_provider=config.ai.default_provider,
+    #             )
+    #             session.add(user)
+    #             await session.commit()
 
-            ai_provider = user.preferred_ai_provider or config.ai.default_provider
-            ai_provider_name = AI_PROVIDERS.get(ai_provider, ai_provider)
+    #         ai_provider = user.preferred_ai_provider or config.ai.default_provider
+    #         ai_provider_name = AI_PROVIDERS.get(ai_provider, ai_provider)
 
-        embed = discord.Embed(
-            title="用户设置",
-            description="您的个人设置信息",
-            color=discord.Color.gold(),
-        )
+    #     embed = discord.Embed(
+    #         title="用户设置",
+    #         description="您的个人设置信息",
+    #         color=discord.Color.gold(),
+    #     )
 
-        embed.add_field(
-            name="用户信息",
-            value=(
-                f"用户名: {interaction.user.display_name}\n"
-                f"用户ID: {interaction.user.id}\n"
-                f"语言: {user.preferred_language if user else config.bot.language}\n"
-                f"货币: {user.preferred_currency if user else 'CNY'}"
-            ),
-            inline=False,
-        )
+    #     embed.add_field(
+    #         name="用户信息",
+    #         value=(
+    #             f"用户名: {interaction.user.display_name}\n"
+    #             f"用户ID: {interaction.user.id}\n"
+    #             f"语言: {user.preferred_language if user else config.bot.language}\n"
+    #             f"货币: {user.preferred_currency if user else 'CNY'}"
+    #         ),
+    #         inline=False,
+    #     )
 
-        embed.add_field(
-            name="AI设置",
-            value=(
-                f"当前AI提供商: {ai_provider_name}\n"
-                f"使用 `/ai_switch` 切换AI提供商"
-            ),
-            inline=False,
-        )
+    #     embed.add_field(
+    #         name="AI设置",
+    #         value=(
+    #             f"当前AI提供商: {ai_provider_name}\n"
+    #             f"使用 `/ai_switch` 切换AI提供商"
+    #         ),
+    #         inline=False,
+    #     )
 
-        if user and user.default_shipping_country:
-            embed.add_field(
-                name="物流设置",
-                value=f"默认收货国家: {user.default_shipping_country}",
-                inline=False,
-            )
+    #     if user and user.default_shipping_country:
+    #         embed.add_field(
+    #             name="物流设置",
+    #             value=f"默认收货国家: {user.default_shipping_country}",
+    #             inline=False,
+    #         )
 
-        embed.add_field(
-            name="快捷操作",
-            value=(
-                "`/ai_switch` - 切换AI提供商\n"
-                "`/help` - 查看所有命令"
-            ),
-            inline=False,
-        )
+    #     embed.add_field(
+    #         name="快捷操作",
+    #         value=(
+    #             "`/ai_switch` - 切换AI提供商\n"
+    #             "`/help` - 查看所有命令"
+    #         ),
+    #         inline=False,
+    #     )
 
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+    #     # 尝试发送响应，处理可能的交互错误
+    #     try:
+    #         # 检查交互是否已经被确认
+    #         if interaction.response.is_done():
+    #             await interaction.followup.send(embed=embed, ephemeral=False)
+    #         else:
+    #             await interaction.response.send_message(embed=embed, ephemeral=False)
+    #     except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+    #         # 处理交互超时或无效的情况
+    #         self.logger.warning(f"发送响应时出错: {e}")
 
     @app_commands.command(name="ai_switch", description="切换AI服务提供商")
     @app_commands.describe(provider="选择AI提供商")
@@ -309,7 +335,16 @@ class GeneralCog(commands.Cog):
             inline=False,
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+        # 尝试发送响应，处理可能的交互错误
+        try:
+            # 检查交互是否已经被确认
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=embed, ephemeral=False)
+            else:
+                await interaction.response.send_message(embed=embed, ephemeral=False)
+        except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+            # 处理交互超时或无效的情况
+            self.logger.warning(f"发送响应时出错: {e}")
 
     @app_commands.command(name="ping", description="测试Bot响应")
     async def ping_command(self, interaction: discord.Interaction) -> None:
@@ -329,29 +364,38 @@ class GeneralCog(commands.Cog):
             color=discord.Color.green() if latency < 200 else discord.Color.orange(),
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+        # 尝试发送响应，处理可能的交互错误
+        try:
+            # 检查交互是否已经被确认
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=embed, ephemeral=False)
+            else:
+                await interaction.response.send_message(embed=embed, ephemeral=False)
+        except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+            # 处理交互超时或无效的情况
+            self.logger.warning(f"发送响应时出错: {e}")
 
-    @commands.Cog.listener()
-    async def on_member_join(self, member: discord.Member) -> None:
-        """
-        新成员加入事件监听
+    # @commands.Cog.listener()
+    # async def on_member_join(self, member: discord.Member) -> None:
+    #     """
+    #     新成员加入事件监听
 
-        当有新用户加入服务器时发送欢迎消息
+    #     当有新用户加入服务器时发送欢迎消息
 
-        Args:
-            member: 新加入的成员
-        """
-        # 只在有系统消息频道时发送欢迎
-        if member.guild.system_channel:
-            try:
-                embed = discord.Embed(
-                    title="欢迎新用户！",
-                    description=f"欢迎 {member.mention} 加入服务器！\n使用 `/start` 了解跨境电商助手。",
-                    color=discord.Color.green(),
-                )
-                await member.guild.system_channel.send(embed=embed)
-            except discord.Forbidden:
-                self.logger.warning(f"无法在新用户加入时发送消息到 {member.guild.name}")
+    #     Args:
+    #         member: 新加入的成员
+    #     """
+    #     # 只在有系统消息频道时发送欢迎
+    #     if member.guild.system_channel:
+    #         try:
+    #             embed = discord.Embed(
+    #                 title="欢迎新用户！",
+    #                 description=f"欢迎 {member.mention} 加入服务器！\n使用 `/start` 了解跨境电商助手。",
+    #                 color=discord.Color.green(),
+    #             )
+    #             await member.guild.system_channel.send(embed=embed)
+    #         except discord.Forbidden:
+    #             self.logger.warning(f"无法在新用户加入时发送消息到 {member.guild.name}")
 
 
 async def setup(bot: commands.Bot) -> None:
