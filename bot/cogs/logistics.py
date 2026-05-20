@@ -22,53 +22,32 @@ from bot.services.platform.category_types import category_type_manager
 
 logger = logging.getLogger(__name__)
 
-# 支持的目的地国家代码映射（Discord choices 限制最多25个）
+# 支持的目的地国家代码映射（20个指定国家）
 SUPPORTED_COUNTRIES = {
+    "BR": "巴西",
     "US": "美国",
-    "CA": "加拿大",
+    "PT": "葡萄牙",
     "UK": "英国",
-    "GB": "英国",
     "DE": "德国",
+    "CA": "加拿大",
+    "CN": "中国大陆",
     "FR": "法国",
     "AU": "澳大利亚",
-    "JP": "日本",
-    "KR": "韩国",
-    "SG": "新加坡",
-    "MY": "马来西亚",
-    "NZ": "新西兰",
-    "IT": "意大利",
     "ES": "西班牙",
-    "NL": "荷兰",
-    "BE": "比利时",
-    "AT": "奥地利",
-    "CH": "瑞士",
-    "SE": "瑞典",
-    "NO": "挪威",
-    "DK": "丹麦",
-    "FI": "芬兰",
+    "IT": "意大利",
     "IE": "爱尔兰",
-    "PT": "葡萄牙",
+    "NL": "荷兰",
+    "AO": "安哥拉",
+    "MX": "墨西哥",
+    "RO": "罗马尼亚",
+    "KH": "柬埔寨",
+    "AT": "奥地利",
+    "AE": "阿联酋",
+    "PL": "波兰",
 }
 
 # 完整的国家映射（用于显示和API调用）
-ALL_COUNTRIES = {
-    **SUPPORTED_COUNTRIES,
-    "GR": "希腊",
-    "PL": "波兰",
-    "CZ": "捷克",
-    "HU": "匈牙利",
-    "RO": "罗马尼亚",
-    "BG": "保加利亚",
-    "HR": "克罗地亚",
-    "SI": "斯洛文尼亚",
-    "SK": "斯洛伐克",
-    "LT": "立陶宛",
-    "LV": "拉脱维亚",
-    "EE": "爱沙尼亚",
-    "LU": "卢森堡",
-    "MT": "马耳他",
-    "CY": "塞浦路斯",
-}
+ALL_COUNTRIES = SUPPORTED_COUNTRIES
 
 
 class LogisticsCog(commands.Cog):
@@ -624,8 +603,9 @@ class LogisticsCog(commands.Cog):
         embed.add_field(
             name="🌍 支持的国家",
             value=(
-                "美国、加拿大、英国、德国、法国、澳大利亚、\n"
-                "日本、韩国、新加坡、马来西亚等30+国家"
+                "巴西、美国、葡萄牙、英国、德国、加拿大、中国大陆、\n"
+                "法国、澳大利亚、西班牙、意大利、爱尔兰、荷兰、\n"
+                "安哥拉、墨西哥、罗马尼亚、柬埔寨、奥地利、阿联酋、波兰"
             ),
             inline=False,
         )

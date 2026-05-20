@@ -81,23 +81,19 @@ class CategoryTypeManager:
             api_client: 运费API客户端实例
         """
         self.api_client = api_client or ShippingAPIClient()
-        self._categories: dict[str, dict] = {}  # 大类数据
-        self._initialized = False
-        logger.info("CategoryTypeManager 实例已创建")
+        self._categories: dict[str, dict] = STATIC_CATEGORY_TYPES.copy()  # 默认使用静态配置
+        self._initialized = True  # 默认标记为已初始化
+        logger.info("CategoryTypeManager 实例已创建，使用静态商品类型配置")
 
     async def initialize(self) -> bool:
         """
         初始化商品类型
 
-        从API获取商品类型列表，失败则使用静态配置
+        从API获取商品类型列表，失败则保留现有配置
 
         Returns:
             是否成功获取商品类型
         """
-        if self._initialized:
-            logger.info("CategoryTypeManager 已经初始化，跳过")
-            return True
-
         logger.info("开始初始化 CategoryTypeManager...")
 
         # 尝试从API获取
@@ -111,16 +107,16 @@ class CategoryTypeManager:
                     total_types = sum(len(cat.get("types", [])) for cat in categories.values())
                     logger.info(f"从API获取商品类型成功，共{len(categories)}个大类，{total_types}个子类")
                     return True
+                else:
+                    logger.warning("API返回空数据，保留现有商品类型配置")
             except Exception as e:
                 logger.warning(f"从API获取商品类型失败: {e}")
         else:
             logger.warning("API未配置，跳过API获取")
 
-        # API获取失败，使用静态配置
-        self._categories = STATIC_CATEGORY_TYPES.copy()
-        self._initialized = True
+        # API获取失败或未配置，保留现有配置
         total_types = sum(len(cat.get("types", [])) for cat in self._categories.values())
-        logger.info(f"使用静态商品类型配置，共{len(self._categories)}个大类，{total_types}个子类")
+        logger.info(f"保留现有商品类型配置，共{len(self._categories)}个大类，{total_types}个子类")
         logger.info(f"商品类型内容: {list(self._categories.keys())}")
         return True
 
@@ -134,38 +130,69 @@ class CategoryTypeManager:
             商品类型字典，结构：{大类code: {name: 大类名称, types: [{code, name, id}]}}
         """
         try:
-            # 尝试调用商品类型接口
-            logger.info("调用商品类型API: GET /express/pub/categories")
-            response = await self.api_client.request("GET", "/express/pub/categories")
+            # 生成随机nonce值
+            import uuid
+            nonce = str(uuid.uuid4())
+            
+            # 准备请求头
+            headers = {
+                "nonce": nonce
+            }
+            
+            # 尝试调用商品类型接口（使用POST方法）
+            logger.info("调用商品类型API: POST /express/pub/types")
+            response = await self.api_client.request("POST", "/express/pub/types", headers=headers)
             logger.debug(f"商品类型API响应: {response}")
             
-            data = response.get("data", {})
+            # 检查响应状态
+            code = response.get("code", 0)
+            if code != 0:
+                logger.warning(f"商品类型API返回错误: {response.get('msg', 'Unknown error')}")
+                return None
+            
+            data = response.get("data", [])
 
             if data:
                 categories = {}
                 # 解析API返回的数据
-                for category in data.get("categories", []):
-                    cat_code = category.get("code", "").lower()
-                    cat_name = category.get("name", "")
-                    cat_types = category.get("types", [])
-
-                    if cat_code and cat_name:
-                        categories[cat_code] = {
-                            "name": cat_name,
-                            "types": [
-                                {
-                                    "code": t.get("code", "").lower(),
-                                    "name": t.get("name", ""),
-                                    "id": t.get("id", 0)
-                                }
-                                for t in cat_types if t.get("code") and t.get("name")
-                            ]
-                        }
+                for category in data:
+                    # 只处理顶级分类（parentId为0）
+                    if category.get("parentId", 0) == 0:
+                        cat_id = category.get("id", 0)
+                        cat_name = category.get("nameCN", "")
+                        # 生成大类代码（使用名称的英文形式或中文转小写）
+                        cat_code = category.get("nameEN", "").lower().replace(" ", "_").replace("/", "_").replace("&", "and")
+                        if not cat_code:
+                            cat_code = str(cat_id)
+                        
+                        # 处理子类
+                        cat_types = []
+                        for child in category.get("children", []):
+                            child_id = child.get("id", 0)
+                            child_name = child.get("nameCN", "")
+                            # 生成子类代码
+                            child_code = child.get("nameEN", "").lower().replace(" ", "_").replace("/", "_").replace("&", "and")
+                            if not child_code:
+                                child_code = str(child_id)
+                            
+                            cat_types.append({
+                                "code": child_code,
+                                "name": child_name,
+                                "id": child_id
+                            })
+                        
+                        if cat_name and cat_types:
+                            categories[cat_code] = {
+                                "name": cat_name,
+                                "types": cat_types
+                            }
 
                 return categories if categories else None
 
         except ShippingAPIError as e:
             logger.warning(f"商品类型API接口不可用: {e}")
+        except Exception as e:
+            logger.warning(f"获取商品类型时发生错误: {e}")
 
         return None
 
